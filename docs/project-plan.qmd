@@ -77,7 +77,7 @@ sequenceDiagram
 - Next turn begins, the next players becomes the player drawing, and continues until the game ends.
 - Game ends when all players agree that the game has ended.
 
-### Abnormal Scenarios
+### Fault Detection
 
 We mainly consider the following two faliure scenarios when we're in-game:
 
