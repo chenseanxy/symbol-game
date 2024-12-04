@@ -1,5 +1,6 @@
 from typing import List
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 from . import messages
 from .messages import Identity
@@ -13,6 +14,7 @@ class Game:
         self.me = me
         self.connections = ConnectionStore()
         self.server = Server(me, self.connections)
+        self.thread_pool = ThreadPoolExecutor(5, "game")
 
         self.phase = "lobby"    # lobby, game
 
@@ -35,6 +37,9 @@ class Game:
         self.connections.stop_all()
 
     def run(self):
+        '''
+        CLI frontend loop
+        '''
         while True:
             cmd = input().split()
             if cmd[0] == "join":
@@ -72,7 +77,7 @@ class Game:
         # in thread for host connection: wait for start_game message and start the game
         def wait_start_game():
             msg = messages.StartGame(**conn.receive())
-            self.on_start_game(msg)
+            self.thread_pool.submit(self.on_start_game, msg)
         conn.thread_pool.submit(wait_start_game)
 
     def command_players(self):
@@ -99,12 +104,20 @@ class Game:
                 continue
             conn = self.connections.get(player)
             conn.send(msg)
-        self.on_start_game(msg)
+        self.thread_pool.submit(self.on_start_game, msg)
 
     def on_start_game(self, msg: messages.StartGame):
+        '''
+        Invoked in the background thread when a game starts
+        - Sets relevant game states locally
+        - Connects to all players, if not already connected
+            - To avoid double connection, only connect to nodes that are before us in the player list
+        - Go to the first turn
+        '''
         self.phase = "game"
         self.players = msg.players
         print("Game started with players:")
         for player in self.players:
             print("-", player)
-
+        # TODO: connect to all players
+        # TODO: go to first turn

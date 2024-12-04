@@ -16,7 +16,7 @@ _logger = logging.getLogger(__name__)
 class Connection:
     '''
     Connection object to another node
-    Handles sending and receiving messages
+    Handles sending and receiving messages through an existing socket
 
     - Send: directly send through socket
     - Receive: blocks until receives one message
@@ -33,7 +33,8 @@ class Connection:
         self.other: Identity = None
         self.terminating = threading.Event()
         self.lock = threading.Lock()
-        self.thread_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="game")
+        self.thread_pool = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix=f"connection_{self.other.ip}_{self.other.port}")
     
     def start(self):
         # identify ourselves and counterparty
@@ -72,7 +73,7 @@ class Connection:
 
 class ConnectionStore:
     '''
-    Store of connections
+    For managing all established connections in the node
     '''
 
     def __init__(self):
@@ -95,6 +96,7 @@ class ConnectionStore:
     def connect(other: Identity, me: Identity):
         '''
         Connect to a node
+        NB: this does not add this connection to ConnectionStore 
         '''
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect(other.addr)
@@ -109,7 +111,7 @@ class ConnectionStore:
 
 class Server:
     '''
-    Server object to listen for incoming connections
+    Server object for accepting incoming connections from other nodes
     '''
 
     def __init__(self, ident: Identity, connection_store: ConnectionStore):
