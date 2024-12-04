@@ -55,11 +55,17 @@ class Game:
                 print("Unknown command: ", cmd)
 
     def on_connect(self, conn: Connection):
-        if self.can_host:
-            print(conn.other, "has connected, start the game with 'start'")
+        if self.phase == 'lobby':
+            if self.can_host:
+                self.is_host = True
+                _logger.info(f"Connected to {conn.other}")
+                print(conn.other, "has connected, start the game with 'start'")
+                self.connections.add(conn)
+                self.players.append(conn.other)
+        else:
+            # At the start of the game phase, another player connecting to us
+            _logger.info(f"Connected to {conn.other}")
             self.connections.add(conn)
-            self.is_host = True
-            self.players.append(conn.other)
 
     def command_join(self, ip: str, port: int):
         if not self.phase == "lobby":
