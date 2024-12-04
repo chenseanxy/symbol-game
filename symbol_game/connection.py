@@ -5,11 +5,13 @@ P2P connection between nodes
 import threading
 import socket
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict
 
 from .messages import Identity, BaseMessage, Hello
 
+_logger = logging.getLogger(__name__)
 
 class Connection:
     '''
@@ -40,8 +42,12 @@ class Connection:
         pass
     
     def stop(self):
+        _logger.info(f"Stopping connection to {self.other}", )
         self.terminating.set()
-        self.socket.shutdown(socket.SHUT_WR)
+        self.socket.shutdown(socket.SHUT_RDWR)
+        self.socket.close()
+        self.thread_pool.shutdown(cancel_futures=True)
+        _logger.info(f"Connection to {self.other} stopped")
 
     def send(self, message):
         '''
@@ -49,7 +55,7 @@ class Connection:
         '''
         if isinstance(message, BaseMessage):
             message = message.model_dump()
-        print(f"Sending {message} to {self.other}")
+        _logger.info(f"Sending {message} to {self.other}")
         self.socket.send(json.dumps(message).encode())
     
     def receive(self):
@@ -60,7 +66,7 @@ class Connection:
         # Otherwise: TODO: frag message handling
         msg = self.socket.recv(1024)
         marshalled = json.loads(msg.decode())
-        print(f"Received {marshalled} from {self.other}")
+        _logger.info(f"Received {marshalled} from {self.other}")
         return marshalled
 
 
@@ -123,10 +129,12 @@ class Server:
         self.thread.start()
     
     def stop(self):
+        _logger.info("Stopping server")
         self.terminating.set()
         socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(self.ident.addr)
         self.sock.close()
         self.thread.join()
+        _logger.info("Server stopped")
     
     def _listen(self):
         while not self.terminating.is_set():

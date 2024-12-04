@@ -1,9 +1,12 @@
 from typing import List
-import threading
+import logging
 
 from . import messages
 from .messages import Identity
 from .connection import Connection, ConnectionStore, Server
+
+_logger = logging.getLogger(__name__)
+
 
 class Game:
     def __init__(self, me: Identity):
@@ -20,29 +23,31 @@ class Game:
     
         self.players: List[Identity] = [me]
 
-    def run(self):
+    def start(self):
         self.server.set_on_connect(self.on_connect)
         self.server.start()
         print(f"Hello, {self.me}!")
         print(f"Wait for other players to join, or join a game with the command 'join <ip> <port>'")
-        try:
-            while True:
-                cmd = input().split()
-                if cmd[0] == "join":
-                    ip, port = cmd[1], int(cmd[2])
-                    self.command_join(ip, port)
-                elif cmd[0] == "start":
-                    self.command_start()
-                elif cmd[0] == "players":
-                    self.command_players()
-                elif cmd[0] == "exit":
-                    break
-                else:
-                    print("Unknown command: ", cmd)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            self.stop()
+
+    def stop(self):
+        _logger.info("Stopping game")
+        self.server.stop()
+        self.connections.stop_all()
+
+    def run(self):
+        while True:
+            cmd = input().split()
+            if cmd[0] == "join":
+                ip, port = cmd[1], int(cmd[2])
+                self.command_join(ip, port)
+            elif cmd[0] == "start":
+                self.command_start()
+            elif cmd[0] == "players":
+                self.command_players()
+            elif cmd[0] == "exit":
+                break
+            else:
+                print("Unknown command: ", cmd)
 
     def on_connect(self, conn: Connection):
         if self.can_host:
@@ -103,7 +108,3 @@ class Game:
         for player in self.players:
             print("-", player)
 
-
-    def stop(self):
-        self.server.stop()
-        self.connections.stop_all()
