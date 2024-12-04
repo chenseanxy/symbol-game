@@ -6,6 +6,11 @@
 
 See `pyprojects.toml`. If you have poetry, you can install all dependencies with `poetry install`.
 
+### Running the game
+
+Minimum setup: `python -m symbol_game --address localhost --port 10081`  
+Quickly connect to another node: `python -m symbol_game --address localhost --port 10081 --name b --connect localhost:10080`
+
 ### Connectivity
 
 - `messages.identity`: globally identifying one node (using ip, port pairs), port being the listening port
