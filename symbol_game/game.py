@@ -29,16 +29,16 @@ class Game:
         self.host = None        # Identity of the host: None, self.me, or some other node
 
         # Player and symbol management
-        self.players: List[Identity] = [me]  # List of all players
-        self.symbols: Dict[Identity, str] = {}  # Maps players to their symbols
-        self.player_ids: Dict[Identity, int] = {}  # Maps players to their numeric IDs
-        self.pending_symbol = None  # Symbol waiting for validation
+        self.players: List[Identity] = [me]         # List of all players
+        self.symbols: Dict[Identity, str] = {}      # Maps players to their symbols
+        self.player_ids: Dict[Identity, int] = {}   # Maps players to their numeric IDs
+        self.pending_symbol = None                  # Symbol waiting for validation
 
         # Game state
-        self.board_size: int = 4  # Size of the game board
+        self.board_size: int = 4                    # Size of the game board
         self.board: List[List[Optional[str]]] = []  # The game board grid
-        self.turn_order: List[int] = []  # Order of player IDs for turns
-        self.current_turn: int = 0  # Index in turn_order
+        self.turn_order: List[int] = []             # Order of player IDs for turns
+        self.current_turn: int = 0                  # Index in turn_order
 
     @property
     def can_host(self) -> bool:
@@ -543,7 +543,7 @@ class Game:
         # Wait for all validations to come back, timeout after 10 seconds
         deadline = time.time() + 10
         while any(v is None for v in validations.values()):
-            print("Waiting for validation responses...", validations)
+            print("Waiting for validation responses...")
             if time.time() > deadline:
                 print("Validation responses timed out")
                 # TODO: handle
