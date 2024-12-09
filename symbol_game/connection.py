@@ -34,8 +34,7 @@ class Connection:
         self.terminating = threading.Event()
         self.lock = threading.Lock()
         self.thread_pool = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix=f"connection_{self.other.ip}_{self.other.port}")
-    
+            max_workers=1, thread_name_prefix=f"connection_{transport.ip}_{transport.port}")
     def start(self):
         # identify ourselves and counterparty
         self.send(Hello(identity=self.me))
