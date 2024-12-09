@@ -226,13 +226,13 @@ class Game:
 
 
     # this is getting messy but who am I to judge kek
-    def on_propose_move(self, conn: Connection, msg: ProposeMove):
+    def on_propose_move(self, conn: Connection, msg: messages.ProposeMove):
         return
 
-    def on_commit_move(self, conn: Connection, msg: CommitMove):
+    def on_commit_move(self, conn: Connection, msg: messages.CommitMove):
         return
 
-    def on_validate_move(self, conn: Connection, msg: ValidateMove):
+    def on_validate_move(self, conn: Connection, msg: messages.ValidateMove):
         return
 
     def command_players(self):
