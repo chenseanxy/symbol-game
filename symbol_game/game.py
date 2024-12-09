@@ -30,6 +30,11 @@ class Game:
         self.symbols: Dict[Identity, str] = {}
         self.board_size: int = 4
         self.turn_order: List[Identity] = []
+        self.message_handlers = {
+            'choose_symbol': self.on_choose_symbol,
+            'validate_symbol': self.on_validate_symbol,  
+            'start_game': self.on_start_game,
+        }
 
     def start(self):
         """Initialize the game server and start accepting connections"""
@@ -91,6 +96,7 @@ class Game:
                 
                 # Set up message handlers
                 conn.set_message_handler('choose_symbol', self.on_choose_symbol)
+                conn.set_message_handler('validate_symbol', self.on_validate_symbol) 
                 conn.set_message_handler('start_game', self.on_start_game)
                 
                 # Update game state
@@ -104,6 +110,10 @@ class Game:
         else:
             _logger.info(f"Connected to {conn.other} during game phase")
             self.connections.add(conn)
+    def on_validate_symbol(self, conn: Connection, msg: messages.ValidateSymbol):
+        """Handle incoming symbol validation response"""
+        _logger.info(f"Received symbol validation response: {msg.is_valid}")
+        # We don't need to do anything here because the validation response is already being handled in the command_symbol's wait_validations function
 
     def command_join(self, ip: str, port: int):
         """Join another player's game"""
@@ -119,19 +129,28 @@ class Game:
         conn = self.connections.connect(Identity(ip=ip, port=port), self.me)
         
         # Set up message handlers
+
         conn.set_message_handler('choose_symbol', self.on_choose_symbol)
+        conn.set_message_handler('validate_symbol', self.on_validate_symbol)  # Add this
         conn.set_message_handler('start_game', self.on_start_game)
-        
         print(f"Connected to {conn.other}")
         self.connections.add(conn)
         self.can_host = False
 
+        print("Please choose a symbol with command 'symbol <X>'")
+
+        # Continue with start game message handling
+        def wait_start_game():
+            msg = messages.StartGame(**conn.receive())
+            self.thread_pool.submit(self.on_start_game, msg)
+        conn.thread_pool.submit(wait_start_game)
+
     def command_symbol(self, symbol: str):
-        """Choose a symbol with improved error handling and validation"""
+        """Choose a symbol with clear user feedback"""
         if self.phase != "lobby":
             print("Can only choose symbol in lobby phase")
             return
-            
+                
         if self.is_host:
             if symbol not in self.symbols.values():
                 self.symbols[self.me] = symbol
@@ -145,14 +164,15 @@ class Game:
         # For non-host players, validate with host
         choice_msg = messages.ChooseSymbol(symbol=symbol)
         _logger.info(f"Sending symbol choice to host: {symbol}")
-
-        # Get connection to host (should be the only connection for a client)
+        
+        # Get the host connection
         host_conn = next(iter(self.connections.connections.values()))
         if not host_conn:
             _logger.error("No connection to host found")
             print("Error: Not connected to host")
             return
 
+        print("Waiting for symbol validation from host...")  # Add feedback about waiting
         _logger.info(f"Sending symbol choice to host at {host_conn.other}")
         host_conn.send(choice_msg)
         
@@ -162,14 +182,13 @@ class Game:
             
             if response.is_valid:
                 self.symbols[self.me] = symbol
-                print(f"Successfully chose symbol: {symbol}")
+                print(f"Successfully chose symbol: {symbol}")  # Make sure this prints
             else:
                 print("Symbol choice was invalid (already taken)")
                 
         except Exception as e:
             _logger.error(f"Error during symbol validation: {e}")
             print("Error validating symbol choice")
-
     def command_players(self):
         """List all players in the game"""
         if self.phase == "lobby" and not self.is_host:
