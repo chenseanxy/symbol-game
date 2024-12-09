@@ -1,6 +1,8 @@
 import random
-from typing import List, Dict, Optional
+import time
 import logging
+from functools import partial
+from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor
 
 from . import messages
@@ -24,8 +26,7 @@ class Game:
 
         # Game phase and role management
         self.phase = "lobby"    # Current phase: "lobby" or "game"
-        self.can_host = True    # Ability to become host (false when joining others)
-        self.is_host = False    # Whether this node is the host
+        self.host = None        # Identity of the host: None, self.me, or some other node
 
         # Player and symbol management
         self.players: List[Identity] = [me]  # List of all players
@@ -39,14 +40,20 @@ class Game:
         self.turn_order: List[int] = []  # Order of player IDs for turns
         self.current_turn: int = 0  # Index in turn_order
 
+    @property
+    def can_host(self) -> bool:
+        return self.host is None or self.host == self.me
+    
+    @property
+    def is_host(self) -> bool:
+        return self.host is not None and self.host == self.me
+
     def start(self):
         """Initialize the game server and begin accepting connections."""
         self.server.set_on_connect(self.on_connect)
         self.server.start()
         print(f"Hello, {self.me}!")
         print(f"Wait for other players to join, or join a game with the command 'join <ip> <port>'")
-        if not self.is_host:
-            print("Please choose a symbol with command 'symbol <X>'")
 
     def stop(self):
         """Clean up resources and close all connections."""
@@ -109,38 +116,55 @@ class Game:
                 else:
                     print("Unknown command:", command)
                     print("Available commands: join, start, players, symbol, move, board, exit")
-            
+
+                self.prompt()
             except Exception as e:
-                _logger.error(f"Error processing command: {type(e).__name__}: {e}")
-                _logger.exception("Full traceback:")
+                _logger.exception(f"Error processing command: {type(e).__name__}: {e}")
+
+    def prompt(self):
+        '''Show command prompt beginning'''
+        if self.phase == "lobby":
+            if self.me not in self.symbols:
+                print("Choose a symbol with 'symbol <X>'")
+            if self.is_host:
+                print("Once everyone is ready, start the game with 'start'")
+        print("> ", end="", flush=True)
 
     def on_connect(self, conn: Connection):
         """Handle new connection and set up message handlers."""
         if self.phase == 'lobby':
             if self.can_host:
-                self.is_host = True
-                _logger.info(f"Connected to {conn.other}")
+                # Become host
+                self.host = self.me
+                _logger.info(f"{conn.other} has connected")
                 
-                # Set up message handlers for all message types
+                # Host-specific incoming messages
                 conn.set_message_handler('choose_symbol', self.on_choose_symbol)
-                conn.set_message_handler('validate_symbol', self.on_validate_symbol)
-                conn.set_message_handler('start_game', self.on_start_game)
 
-                # new batch
-                conn.set_message_handler('propose_move', self.on_propose_move)
-                conn.set_message_handler('commit_move', self.on_commit_move)
-                conn.set_message_handler('validate_move', self.on_validate_move)
-                
                 # Update game state and inform user
                 self.connections.add(conn)
                 self.players.append(conn.other)
                 print(f"{conn.other} has connected, start the game with 'start'")
-                print("Please choose a symbol with command 'symbol <X>'")
             else:
-                print("Please choose a symbol with command 'symbol <X>'")
+                _logger.info(
+                    f"Connected to {conn.other} when we're still in the lobby, "
+                    "assuming that the game has started, we just haven't been notified yet"
+                )
+                self.connections.add(conn)
         else:
             _logger.info(f"Connected to {conn.other} during game phase")
             self.connections.add(conn)
+        
+        # Setup message handlers as client
+        conn.set_message_handler('validate_symbol', self.on_validate_symbol)
+        conn.set_message_handler('start_game', self.on_start_game)
+
+        # Setup message handlers for the game phase
+        conn.set_message_handler('propose_move', self.on_propose_move)
+        conn.set_message_handler('commit_move', self.on_commit_move)
+        conn.set_message_handler('validate_move', self.on_validate_move)
+
+        self.prompt()
 
     def command_join(self, ip: str, port: int):
         """Join another player's game session."""
@@ -153,24 +177,18 @@ class Game:
 
         conn = self.connections.connect(Identity(ip=ip, port=port), self.me)
         
-        # Set up message handlers
-        conn.set_message_handler('choose_symbol', self.on_choose_symbol)
+        # Set up message handlers as client
         conn.set_message_handler('validate_symbol', self.on_validate_symbol)
         conn.set_message_handler('start_game', self.on_start_game)
 
+        # Setup message handlers for the game phase
         conn.set_message_handler('propose_move', self.on_propose_move)
         conn.set_message_handler('commit_move', self.on_commit_move)
         conn.set_message_handler('validate_move', self.on_validate_move)
         
         print(f"Connected to {conn.other}")
         self.connections.add(conn)
-        self.can_host = False
-        print("Please choose a symbol with command 'symbol <X>'")
-
-        def wait_start_game():
-            msg = messages.StartGame(**conn.receive())
-            self.thread_pool.submit(self.on_start_game, msg)
-        conn.thread_pool.submit(wait_start_game)
+        self.host = conn.other
 
     def command_symbol(self, symbol: str):
         """Handle symbol selection request."""
@@ -223,8 +241,7 @@ class Game:
             print("\nSymbol choice was invalid (already taken)")
         
         self.pending_symbol = None
-        print("\nEnter command: ", end='', flush=True)
-
+        self.prompt()
 
     # this is getting messy but who am I to judge kek
     def on_propose_move(self, conn: Connection, msg: messages.ProposeMove):
@@ -293,6 +310,7 @@ class Game:
         # Announce next turn
         if self.is_my_turn():
             print("\nIt's your turn! Use 'move <row> <col>' to make a move.")
+            self.prompt()
         else:
             next_player = next(p for p in self.players 
                             if self.player_ids[p] == self.turn_order[self.current_turn])
@@ -385,7 +403,7 @@ class Game:
         # Create and send start game message
         msg = messages.StartGame(
             players=player_info,
-            board_size=self.board_size,
+            board_size=len(self.players) + 1,
             turn_order=turn_order,
             session_settings={}
         )
@@ -397,7 +415,7 @@ class Game:
                 conn.send(msg)
 
         # Start game locally
-        self.on_start_game(msg)
+        self.on_start_game(None, msg)
 
     def is_valid_to_start(self) -> bool:
         """Check if the game can be started."""
@@ -415,7 +433,7 @@ class Game:
             return False
         return True
 
-    def on_start_game(self, msg: messages.StartGame):
+    def on_start_game(self, conn, msg: messages.StartGame):
         """Handle game start message and initialize game state."""
         self.phase = "game"
         self.initialize_board(msg.board_size)
@@ -444,6 +462,31 @@ class Game:
         self.turn_order = msg.turn_order
         self.current_turn = 0
 
+        # Connect to clients that have their id smaller than us
+        # ID, NOT TURN ORDER, this should not be randomized
+        for player in self.players:
+            if self.player_ids[player] < self.player_ids[self.me]:
+                if player not in self.connections.connections:
+                    conn = self.connections.connect(player, self.me)
+
+                    # Set up message handlers as client
+                    conn.set_message_handler('validate_symbol', self.on_validate_symbol)
+                    conn.set_message_handler('start_game', self.on_start_game)
+
+                    # Setup message handlers for the game phase
+                    conn.set_message_handler('propose_move', self.on_propose_move)
+                    conn.set_message_handler('commit_move', self.on_commit_move)
+                    conn.set_message_handler('validate_move', self.on_validate_move)
+                    self.connections.add(conn)
+
+        # Wait for all other players to connect
+        time.sleep(0.02)
+        for player in self.players:
+            if player != self.me and player not in self.connections.connections:
+                print(f"Waiting for {player} to connect...")
+                while player not in self.connections.connections:
+                    time.sleep(0.01)
+
         # Display game start information
         print("\nGame started!")
         print("\nPlayers and their symbols:")
@@ -456,6 +499,7 @@ class Game:
 
         if self.is_my_turn():
             print("\nIt's your turn! Use 'move <row> <col>' to make a move.")
+            self.prompt()
 
     def command_move(self, row: int, col: int):
         ''' handles a move command from the current player'''
@@ -475,31 +519,44 @@ class Game:
             return
 
         move_msg = messages.ProposeMove(location=[row, col])
-        validations = [] # for all players' validations of the move
+        validations: Dict[str, messages.ValidateMove] = {}  # for all players' validations of the move
 
         _logger.info("Starting move process...")
+
+        def on_validation(player, conn, response):
+            _logger.info(f"Received validation response from {conn.other}: {response}")
+            _logger.info(f"{player=} {conn.other=}")
+            validations[player] = response
 
         print("Proposing move to other players...")
         for player in self.players:
             if player != self.me:
                 conn = self.connections.get(player)
-                _logger.info(f"Sending move proposal to {player}")
+                _logger.info(f"Sending move proposal to {player}: {move_msg=}")
+                conn.set_message_handler(
+                    'validate_move',
+                    partial(on_validation, player)
+                )
+                validations[player] = None      # Mark as pending
                 conn.send(move_msg)
 
-                # wait for validation
-                _logger.info(f"Waiting for validation from {player}")
-                response_dict = conn.receive()
-                _logger.info(f"Received raw validation response: {response_dict}")
-                response = messages.ValidateMove(**response_dict)
-                _logger.info(f"Received validation response: {response}")
-                validations.append(response)
+        # Wait for all validations to come back, timeout after 10 seconds
+        deadline = time.time() + 10
+        while any(v is None for v in validations.values()):
+            print("Waiting for validation responses...", validations)
+            if time.time() > deadline:
+                print("Validation responses timed out")
+                # TODO: handle
+                return
+            time.sleep(0.1)
 
         _logger.info(f"Validation check starting. All validations: {validations}")  # Before validation check
-        all_valid = all(v.is_valid for v in validations)
+        all_valid = all(v.is_valid for v in validations.values())
         _logger.info(f"All moves valid: {all_valid}")  # After validation check
 
         if not all_valid:
             print("Move was rejected by other players!")
+            # TODO: handle
             return
 
         _logger.info("Move validated, proceeding with commit")
@@ -522,15 +579,18 @@ class Game:
                 conn = self.connections.get(player)
                 _logger.info(f"Sending commit to {player}")
                 conn.send(commit_msg)
+        
+        print("Move successful! After your move, the board is: ")
+        self.display_board()
 
         # check winning condition here
 
         # check for non-None game result
-        game_result = next((v.game_result for v in validations if v.game_result), None)
+        game_result = next((v.game_result for v in validations.values() if v.game_result), None)
 
         # check for non-None winner
         if game_result:
-            winner = next((v.winning_player for v in validations if v.winning_player), None)
+            winner = next((v.winning_player for v in validations.values() if v.winning_player), None)
 
             # print endgame msg
             if winner:
@@ -543,8 +603,6 @@ class Game:
 
         # move to next turn
         self.current_turn = (self.current_turn + 1) % len(self.turn_order)
-
-        self.display_board()
 
         # announce next player's turn
         next_player = next(p for p in self.players 
