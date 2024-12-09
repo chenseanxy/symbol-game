@@ -235,6 +235,35 @@ class Game:
     def on_validate_move(self, conn: Connection, msg: messages.ValidateMove):
         return
 
+    def is_board_full(self) -> bool:
+        '''checks if the board is completely filled.'''
+        return all(cell is not None
+                for row in self.board
+                for cell in row)
+
+    def check_win(self, row: int, col: int, symbol: str) -> bool:
+        '''checks if the last move at (row, col) created a winning condition'''
+
+        # checks row
+        if all(self.board[row][c] == symbol for c in range(self.board_size)):
+            return True
+
+        # checks column
+        if all(self.board[r][col] == symbol for r in range(self.board_size)):
+            return True
+
+        # checks diagonals if move was on them
+        if row == col:
+            if all(self.board[i][i] == symbol for i in range(self.board_size)):
+                return True
+
+        if row + col == self.board_size - 1:
+            if all(self.board[i][self.board_size-1-i] == symbol 
+                for i in range(self.board_size)):
+                return True
+            
+        return False
+
     def command_players(self):
         """Display current player list with their symbols."""
         if self.phase == "lobby" and not self.is_host:
