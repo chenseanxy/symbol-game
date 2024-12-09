@@ -32,12 +32,14 @@ class Hello(BaseMessage):
     identity: Identity
 
 class StartGame(BaseMessage):
-    '''Message to begin the game'''
+    '''
+    Message sent to start the game with complete game configuration
+    '''
     method: Literal['start_game'] = 'start_game'
-    players: List[Dict[str, Any]]  # List of player information
-    board_size: int
-    turn_order: List[int]
-    session_settings: Dict[str, Any]
+    players: List[Dict[str, Any]]  # Player information including ID, name, address, symbol
+    board_size: int                # Size of the game board (e.g., 4x4)
+    turn_order: List[int]          # Order of player IDs for turns
+    session_settings: Dict[str, Any] = {}  # Additional game settings
 
 class ChooseSymbol(BaseMessage):
     '''Symbol selection message'''
