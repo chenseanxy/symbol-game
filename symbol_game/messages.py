@@ -77,7 +77,7 @@ class CommitMove(BaseMessage):
     player_id: int
 
 # Registry of message types
-message_types = {
+message_types: Dict[str, type[BaseMessage]] = {
     'hello': Hello,
     'choose_symbol': ChooseSymbol,
     'validate_symbol': ValidateSymbol,

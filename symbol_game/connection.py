@@ -5,7 +5,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Optional, Callable
 from . import messages
-from .messages import Identity, BaseMessage
+from .messages import Identity, BaseMessage, message_types
 
 _logger = logging.getLogger(__name__)
 
@@ -23,6 +23,8 @@ class Connection:
             max_workers=1, 
             thread_name_prefix=f"connection_{transport.ip}_{transport.port}"
         )
+        self.receive_thread = threading.Thread(
+            target=self.message_loop, name=f"incoming_{transport.ip}_{transport.port}")
         self.message_handlers: Dict[str, Callable] = {}
 
     def set_message_handler(self, message_type: str, handler: Callable):
@@ -37,7 +39,7 @@ class Connection:
         self.other = messages.Hello(**self.receive()).identity
         
         # Start message handling loop
-        self.thread_pool.submit(self.message_loop)
+        self.receive_thread.start()
 
     def message_loop(self):
         """Main message handling loop with improved error handling"""
@@ -47,21 +49,18 @@ class Connection:
                 if msg is None:
                     continue
                 
-                method = msg.get('method')
-                _logger.info(f"Processing received message type: {method}")
-                
+                # Unmarshall message
+                method = BaseMessage(**msg).method
+                if method not in message_types:
+                    _logger.error(f"Invalid message type: {method}")
+                    continue
+                msg_type = message_types[method]
+                msg = msg_type(**msg)
+
+                # Dispatch message to handler
                 if method in self.message_handlers:
                     handler = self.message_handlers[method]
-                    if method == 'choose_symbol':
-                        message_obj = messages.ChooseSymbol(**msg)
-                        _logger.info(f"Created ChooseSymbol object: {message_obj.symbol}")
-                    elif method == 'validate_symbol':
-                        message_obj = messages.ValidateSymbol(**msg)
-                        _logger.info(f"Created ValidateSymbol object: {message_obj.is_valid}")
-                    else:
-                        message_obj = msg
-                        
-                    handler(self, message_obj)
+                    handler(self, msg)
                 else:
                     _logger.warning(f"No handler for message type: {method}")
                     
@@ -69,9 +68,10 @@ class Connection:
                 _logger.error("Connection lost")
                 break
             except Exception as e:
-                _logger.error(f"Error in message loop: {type(e).__name__}: {e}")
+                _logger.exception(f"Error in message loop: {type(e).__name__}: {e}")
                 if self.terminating.is_set():
-                    break            
+                    break
+
     def receive(self):
         """Receive and parse a message with better error handling"""
         try:
@@ -120,6 +120,11 @@ class ConnectionStore:
     
     def add(self, conn: Connection):
         with self.lock:
+            if conn.other in self.connections:
+                # Likely a reconnection
+                prev = self.connections.pop(conn.other)
+                conn.message_handlers = prev.message_handlers
+                prev.stop()
             self.connections[conn.other] = conn
     
     def remove(self, ident: Identity):
