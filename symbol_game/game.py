@@ -111,7 +111,8 @@ class Game:
                     print("Available commands: join, start, players, symbol, move, board, exit")
             
             except Exception as e:
-                _logger.error(f"Error processing command: {e}")
+                _logger.error(f"Error processing command: {type(e).__name__}: {e}")
+                _logger.exception("Full traceback:")
 
     def on_connect(self, conn: Connection):
         """Handle new connection and set up message handlers."""
@@ -227,13 +228,97 @@ class Game:
 
     # this is getting messy but who am I to judge kek
     def on_propose_move(self, conn: Connection, msg: messages.ProposeMove):
-        return
+        """ handles move proposition by players"""
+        _logger.info(f"Received move proposal from {conn.other}: location {msg.location}")
+
+        row, col = msg.location
+
+        # validates move
+        valid = (0 <= row < self.board_size and 
+                0 <= col < self.board_size and 
+                self.board[row][col] is None)
+
+        _logger.info(f"Move validation result: coordinates valid={valid}, "
+                f"row={row}, col={col}, board_size={self.board_size}")
+
+        # checks for win/tie if move would be valid
+        game_result = None
+        winning_player = None
+
+        if valid:
+            # temporarily applies move to check for win condition
+            symbol = self.symbols[conn.other]
+            self.board[row][col] = symbol
+            _logger.info(f"Checking win condition for symbol {symbol}")
+
+            if self.check_win(row, col, symbol):
+                game_result = "win"
+                winning_player = self.player_ids[conn.other]
+                _logger.info(f"Win detected for player {winning_player}")
+            elif self.is_board_full():
+                game_result = "tie"
+                _logger.info("Tie detected - board is full")
+
+            # undoes temporary move
+            self.board[row][col] = None
+            _logger.info("Temporary move undone")
+
+        response = messages.ValidateMove(
+            is_valid=valid,
+            game_result=game_result,
+            winning_player=winning_player
+        )
+        _logger.info(f"Sending validation response: {response}")
+        conn.send(response)
+
 
     def on_commit_move(self, conn: Connection, msg: messages.CommitMove):
-        return
+        """move commitment - update board with the confirmed move."""
+        _logger.info(f"Received move commitment from {conn.other}: "
+            f"location={msg.location}, symbol={msg.symbol}, player_id={msg.player_id}")
+
+        row, col = msg.location
+        
+        # Apply the move to our board
+        self.board[row][col] = msg.symbol
+        _logger.info(f"Applied move to board at ({row}, {col})")
+
+        # Move to next turn
+        self.current_turn = (self.current_turn + 1) % len(self.turn_order)
+        _logger.info(f"Updated turn to {self.current_turn}")
+
+        # Display updated game state
+        self.display_board()
+
+        # Announce next turn
+        if self.is_my_turn():
+            print("\nIt's your turn! Use 'move <row> <col>' to make a move.")
+        else:
+            next_player = next(p for p in self.players 
+                            if self.player_ids[p] == self.turn_order[self.current_turn])
+            print(f"\nIt's {next_player.name}'s turn!")
+
+
 
     def on_validate_move(self, conn: Connection, msg: messages.ValidateMove):
-        return
+        """handles validation response for a proposed move."""
+        _logger.info(f"Received move validation from {conn.other}: valid={msg.is_valid}, "
+                    f"game_result={msg.game_result}, winning_player={msg.winning_player}")
+
+        if not msg.is_valid:
+            print(f"Move was rejected by {conn.other}")
+            return
+
+        if msg.game_result:
+            if msg.game_result == "win":
+                winner_name = next(p.name for p in self.players 
+                                if self.player_ids[p] == msg.winning_player)
+                print(f"This move would result in victory for {winner_name}!")
+            else:
+                print("This move would result in a tie!")
+
+        _logger.info("Move validation accepted")
+        return True
 
     def is_board_full(self) -> bool:
         '''checks if the board is completely filled.'''
@@ -338,10 +423,22 @@ class Game:
         # Process player information
         for player_info in msg.players:
             player_id = player_info["id"]
-            for player in self.players:
+            addr = player_info["address"].split(":")
+            player = Identity(ip=addr[0], port=int(addr[1]), name=player_info["name"])
+
+            # Store both ID and symbol
+            self.player_ids[player] = player_id
+            self.symbols[player] = player_info["symbol"]
+
+            # Make sure player is in players list
+            if player not in self.players:
+                self.players.append(player)
+
+
+            """for player in self.players:
                 if f"{player.ip}:{player.port}" == player_info["address"]:
                     self.player_ids[player] = player_id
-                    break
+                    break"""
 
         # Set up turn order
         self.turn_order = msg.turn_order
@@ -380,24 +477,37 @@ class Game:
         move_msg = messages.ProposeMove(location=[row, col])
         validations = [] # for all players' validations of the move
 
+        _logger.info("Starting move process...")
+
         print("Proposing move to other players...")
         for player in self.players:
             if player != self.me:
                 conn = self.connections.get(player)
+                _logger.info(f"Sending move proposal to {player}")
                 conn.send(move_msg)
 
                 # wait for validation
-                response = messages.ValidateMove(**conn.receive())
+                _logger.info(f"Waiting for validation from {player}")
+                response_dict = conn.receive()
+                _logger.info(f"Received raw validation response: {response_dict}")
+                response = messages.ValidateMove(**response_dict)
+                _logger.info(f"Received validation response: {response}")
                 validations.append(response)
 
-        if not all(v.is_valid for v in validations):
+        _logger.info(f"Validation check starting. All validations: {validations}")  # Before validation check
+        all_valid = all(v.is_valid for v in validations)
+        _logger.info(f"All moves valid: {all_valid}")  # After validation check
+
+        if not all_valid:
             print("Move was rejected by other players!")
             return
 
+        _logger.info("Move validated, proceeding with commit")
         # make actual move here
         player_id = self.player_ids[self.me]
         symbol = self.symbols[self.me]
         self.board[row][col] = symbol
+        _logger.info(f"Applied move locally: position=({row}, {col}), symbol={symbol}")
 
         # commit move to all players
         commit_msg = messages.CommitMove(
@@ -405,10 +515,12 @@ class Game:
             symbol=symbol,
             player_id=player_id
         )
+        _logger.info("Sending commit message to all players")
 
         for player in self.players:
             if player != self.me:
                 conn = self.connections.get(player)
+                _logger.info(f"Sending commit to {player}")
                 conn.send(commit_msg)
 
         # check winning condition here
