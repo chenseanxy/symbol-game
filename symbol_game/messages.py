@@ -51,10 +51,38 @@ class ValidateSymbol(BaseMessage):
     method: Literal['validate_symbol'] = 'validate_symbol'
     is_valid: bool
 
+class ProposeMove(BaseMessage):
+    '''
+    Message sent when a player wants to make a move to coordinates
+    '''
+    method: Literal['propose_move'] = 'propose_move'
+    location: List[int] # coordinates
+
+class ValidateMove(BaseMessage):
+    '''
+    Response to a proposed move
+    '''
+    method: Literal['validate_move'] = 'validate_move'
+    is_valid: bool
+    game_result: Optional[str] = None  # (win, tie) strings or None 
+    winning_player: Optional[int] = None # same but player id
+
+class CommitMove(BaseMessage):
+    '''
+    Message to confirm a move
+    '''
+    method: Literal['commit_move'] = 'commit_move'
+    location: List[int] # coordinates
+    symbol: str
+    player_id: int
+
 # Registry of message types
 message_types = {
     'hello': Hello,
     'choose_symbol': ChooseSymbol,
     'validate_symbol': ValidateSymbol,
     'start_game': StartGame,
+    'propose_move': ProposeMove,
+    'validate_move': ValidateMove,
+    'commit_move': CommitMove,
 }

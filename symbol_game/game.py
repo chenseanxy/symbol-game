@@ -124,6 +124,11 @@ class Game:
                 conn.set_message_handler('choose_symbol', self.on_choose_symbol)
                 conn.set_message_handler('validate_symbol', self.on_validate_symbol)
                 conn.set_message_handler('start_game', self.on_start_game)
+
+                # new batch
+                conn.set_message_handler('propose_move', self.on_propose_move)
+                conn.set_message_handler('commit_move', self.on_commit_move)
+                conn.set_message_handler('validate_move', self.on_validate_move)
                 
                 # Update game state and inform user
                 self.connections.add(conn)
@@ -151,6 +156,10 @@ class Game:
         conn.set_message_handler('choose_symbol', self.on_choose_symbol)
         conn.set_message_handler('validate_symbol', self.on_validate_symbol)
         conn.set_message_handler('start_game', self.on_start_game)
+
+        conn.set_message_handler('propose_move', self.on_propose_move)
+        conn.set_message_handler('commit_move', self.on_commit_move)
+        conn.set_message_handler('validate_move', self.on_validate_move)
         
         print(f"Connected to {conn.other}")
         self.connections.add(conn)
@@ -214,6 +223,17 @@ class Game:
         
         self.pending_symbol = None
         print("\nEnter command: ", end='', flush=True)
+
+
+    # this is getting messy but who am I to judge kek
+    def on_propose_move(self, conn: Connection, msg: ProposeMove):
+        return
+
+    def on_commit_move(self, conn: Connection, msg: CommitMove):
+        return
+
+    def on_validate_move(self, conn: Connection, msg: ValidateMove):
+        return
 
     def command_players(self):
         """Display current player list with their symbols."""
@@ -311,4 +331,81 @@ class Game:
         if self.is_my_turn():
             print("\nIt's your turn! Use 'move <row> <col>' to make a move.")
 
-    # TODO: Implement command_move to start the first found
+    def command_move(self, row: int, col: int):
+        ''' handles a move command from the current player'''
+
+        # checks for turn
+        if not self.is_my_turn():
+            print("Wait your turn!")
+            return
+
+        # checks for bad coordinates
+        if not (0 <= row < self.board_size and 0 <= col < self.board_size):
+            print(f"Invalid coordinates. Must be between 0 and {self.board_size-1}")
+            return
+        # checks for marks on board
+        if self.board[row][col] is not None:
+            print("That cell is already marked!")
+            return
+
+        move_msg = messages.ProposeMove(location=[row, col])
+        validations = [] # for all players' validations of the move
+
+        print("Proposing move to other players...")
+        for player in self.players:
+            if player != self.me:
+                conn = self.connections.get(player)
+                conn.send(move_msg)
+
+                # wait for validation
+                response = messages.ValidateMove(**conn.receive())
+                validations.append(response)
+
+        if not all(v.is_valid for v in validations):
+            print("Move was rejected by other players!")
+            return
+
+        # make actual move here
+        player_id = self.player_ids[self.me]
+        symbol = self.symbols[self.me]
+        self.board[row][col] = symbol
+
+        # commit move to all players
+        commit_msg = messages.CommitMove(
+            location=[row, col],
+            symbol=symbol,
+            player_id=player_id
+        )
+
+        for player in self.players:
+            if player != self.me:
+                conn = self.connections.get(player)
+                conn.send(commit_msg)
+
+        # check winning condition here
+
+        # check for non-None game result
+        game_result = next((v.game_result for v in validations if v.game_result), None)
+
+        # check for non-None winner
+        if game_result:
+            winner = next((v.winning_player for v in validations if v.winning_player), None)
+
+            # print endgame msg
+            if winner:
+                winner_name = next(p.name for p in self.players 
+                                if self.player_ids[p] == winner)
+                print(f"\nGame Over! {winner_name} wins!")
+            else:
+                print("\nGame Over! It's a tie!")
+            return
+
+        # move to next turn
+        self.current_turn = (self.current_turn + 1) % len(self.turn_order)
+
+        self.display_board()
+
+        # announce next player's turn
+        next_player = next(p for p in self.players 
+                        if self.player_ids[p] == self.turn_order[self.current_turn])
+        print(f"\nIt's {next_player.name}'s turn!")
