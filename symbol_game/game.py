@@ -1,3 +1,4 @@
+import random
 from typing import List, Dict
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -9,32 +10,26 @@ from .connection import Connection, ConnectionStore, Server
 _logger = logging.getLogger(__name__)
 
 class Game:
-    """
-    Main game class that manages the game state and coordinates between players.
-    Handles both host and client roles in the P2P network.
-    """
     def __init__(self, me: Identity):
-        # Core components
+        # Core game components
         self.me = me
         self.connections = ConnectionStore()
         self.server = Server(me, self.connections)
         self.thread_pool = ThreadPoolExecutor(5, "game")
 
-        # Game state
-        self.phase = "lobby"    # Phases: "lobby" or "game"
-        self.can_host = True    # Becomes False when joining another's game
-        self.is_host = False    # True when other players connect to us
+        # Game state management
+        self.phase = "lobby"    # Current game phase (lobby or game)
+        self.can_host = True    # Whether this node can become a host
+        self.is_host = False    # Whether this node is currently hosting
         
-        # Player management
+        # Player and symbol management
         self.players: List[Identity] = [me]
-        self.symbols: Dict[Identity, str] = {}
+        self.symbols: Dict[Identity, str] = {}  # Maps players to their chosen symbols
+        self.pending_symbol = None  # Tracks symbol waiting for validation
+        
+        # Game configuration
         self.board_size: int = 4
         self.turn_order: List[Identity] = []
-        self.message_handlers = {
-            'choose_symbol': self.on_choose_symbol,
-            'validate_symbol': self.on_validate_symbol,  
-            'start_game': self.on_start_game,
-        }
 
     def start(self):
         """Initialize the game server and start accepting connections"""
@@ -44,7 +39,7 @@ class Game:
         print(f"Wait for other players to join, or join a game with the command 'join <ip> <port>'")
 
     def stop(self):
-        """Cleanup and close all connections"""
+        """Clean up resources and stop all connections"""
         _logger.info("Stopping game")
         self.server.stop()
         self.connections.stop_all()
@@ -56,7 +51,7 @@ class Game:
                 cmd = input().split()
                 if not cmd:
                     continue
-                    
+
                 command = cmd[0]
                 if command == "join":
                     if len(cmd) != 3:
@@ -83,26 +78,25 @@ class Game:
                 else:
                     print("Unknown command:", command)
                     print("Available commands: join, start, players, symbol, exit")
-                    
+            
             except Exception as e:
                 _logger.error(f"Error processing command: {e}")
 
     def on_connect(self, conn: Connection):
-        """Handle new connection from another player"""
+        """Handle new connection and set up message handlers"""
         if self.phase == 'lobby':
             if self.can_host:
                 self.is_host = True
                 _logger.info(f"Connected to {conn.other}")
                 
-                # Set up message handlers
+                # Set up message handlers for all message types
                 conn.set_message_handler('choose_symbol', self.on_choose_symbol)
-                conn.set_message_handler('validate_symbol', self.on_validate_symbol) 
+                conn.set_message_handler('validate_symbol', self.on_validate_symbol)
                 conn.set_message_handler('start_game', self.on_start_game)
                 
-                # Update game state
+                # Update game state and inform user
                 self.connections.add(conn)
                 self.players.append(conn.other)
-                
                 print(f"{conn.other} has connected, start the game with 'start'")
                 print("Please choose a symbol with command 'symbol <X>'")
             else:
@@ -110,10 +104,6 @@ class Game:
         else:
             _logger.info(f"Connected to {conn.other} during game phase")
             self.connections.add(conn)
-    def on_validate_symbol(self, conn: Connection, msg: messages.ValidateSymbol):
-        """Handle incoming symbol validation response"""
-        _logger.info(f"Received symbol validation response: {msg.is_valid}")
-        # We don't need to do anything here because the validation response is already being handled in the command_symbol's wait_validations function
 
     def command_join(self, ip: str, port: int):
         """Join another player's game"""
@@ -125,32 +115,29 @@ class Game:
             print("You are already hosting a game, start the game with 'start'")
             return
 
-        # Connect to host
+        # Establish connection and set up handlers
         conn = self.connections.connect(Identity(ip=ip, port=port), self.me)
-        
-        # Set up message handlers
-
         conn.set_message_handler('choose_symbol', self.on_choose_symbol)
-        conn.set_message_handler('validate_symbol', self.on_validate_symbol)  # Add this
+        conn.set_message_handler('validate_symbol', self.on_validate_symbol)
         conn.set_message_handler('start_game', self.on_start_game)
+        
         print(f"Connected to {conn.other}")
         self.connections.add(conn)
         self.can_host = False
-
         print("Please choose a symbol with command 'symbol <X>'")
 
-        # Continue with start game message handling
+        # Wait for game start message
         def wait_start_game():
             msg = messages.StartGame(**conn.receive())
             self.thread_pool.submit(self.on_start_game, msg)
         conn.thread_pool.submit(wait_start_game)
 
     def command_symbol(self, symbol: str):
-        """Choose a symbol with clear user feedback"""
+        """Handle symbol selection request"""
         if self.phase != "lobby":
             print("Can only choose symbol in lobby phase")
             return
-                
+            
         if self.is_host:
             if symbol not in self.symbols.values():
                 self.symbols[self.me] = symbol
@@ -161,36 +148,44 @@ class Game:
                 print("This symbol is already taken")
             return
 
-        # For non-host players, validate with host
+        # Store pending symbol and send validation request
+        self.pending_symbol = symbol
         choice_msg = messages.ChooseSymbol(symbol=symbol)
-        _logger.info(f"Sending symbol choice to host: {symbol}")
-        
-        # Get the host connection
         host_conn = next(iter(self.connections.connections.values()))
-        if not host_conn:
-            _logger.error("No connection to host found")
-            print("Error: Not connected to host")
-            return
-
-        print("Waiting for symbol validation from host...")  # Add feedback about waiting
-        _logger.info(f"Sending symbol choice to host at {host_conn.other}")
-        host_conn.send(choice_msg)
         
-        try:
-            response = messages.ValidateSymbol(**host_conn.receive())
-            _logger.info(f"Received validation response: {response.is_valid}")
-            
-            if response.is_valid:
-                self.symbols[self.me] = symbol
-                print(f"Successfully chose symbol: {symbol}")  # Make sure this prints
-            else:
-                print("Symbol choice was invalid (already taken)")
-                
-        except Exception as e:
-            _logger.error(f"Error during symbol validation: {e}")
-            print("Error validating symbol choice")
+        print("Waiting for symbol validation from host...")
+        host_conn.send(choice_msg)
+
+    def on_choose_symbol(self, conn: Connection, msg: messages.ChooseSymbol):
+        """Handle incoming symbol choice request"""
+        _logger.info(f"Received symbol choice request from {conn.other}: {msg.symbol}")
+        
+        is_valid = msg.symbol not in self.symbols.values()
+        _logger.info(f"Symbol {msg.symbol} validation result: {is_valid}")
+        
+        response = messages.ValidateSymbol(is_valid=is_valid)
+        _logger.info(f"Sending validation response to {conn.other}: {is_valid}")
+        conn.send(response)
+        
+        if is_valid:
+            _logger.info(f"Recording symbol {msg.symbol} for {conn.other}")
+            self.symbols[conn.other] = msg.symbol
+
+    def on_validate_symbol(self, conn: Connection, msg: messages.ValidateSymbol):
+        """Handle symbol validation response"""
+        _logger.info(f"Received symbol validation response: {msg.is_valid}")
+        
+        if msg.is_valid and self.pending_symbol:
+            self.symbols[self.me] = self.pending_symbol
+            print(f"\nSuccessfully chose symbol: {self.pending_symbol}")
+        else:
+            print("\nSymbol choice was invalid (already taken)")
+        
+        self.pending_symbol = None
+        print("\nEnter command: ", end='', flush=True)
+
     def command_players(self):
-        """List all players in the game"""
+        """Display current player list"""
         if self.phase == "lobby" and not self.is_host:
             print("Only hosts can list players in the lobby")
             return
@@ -218,11 +213,10 @@ class Game:
             print("Not all players have chosen symbols")
             return
 
-        # Generate random turn order
+        # Generate random turn order and player info
         self.turn_order = self.players.copy()
         random.shuffle(self.turn_order)
 
-        # Create player info for start message
         player_info = [
             {
                 "id": i + 1,
@@ -250,29 +244,10 @@ class Game:
         # Process start game locally
         self.thread_pool.submit(self.on_start_game, msg)
 
-    def on_choose_symbol(self, conn: Connection, msg: messages.ChooseSymbol):
-        """Handle symbol choice from another player"""
-        _logger.info(f"Validating symbol choice from {conn.other}: {msg.symbol}")
-        
-        # Check if symbol is available
-        is_valid = msg.symbol not in self.symbols.values()
-        _logger.info(f"Symbol {msg.symbol} validation result: {is_valid}")
-        
-        # Send response
-        response = messages.ValidateSymbol(is_valid=is_valid)
-        _logger.info(f"Sending validation to {conn.other}: {is_valid}")
-        conn.send(response)
-        
-        # Record if valid
-        if is_valid:
-            _logger.info(f"Recording symbol {msg.symbol} for {conn.other}")
-            self.symbols[conn.other] = msg.symbol
-
     def on_start_game(self, msg: messages.StartGame):
-        """Handle game start"""
+        """Handle game start message"""
         self.phase = "game"
         print("\nGame started with players:")
         for player in msg.players:
             print(f"- {player['name']} ({player['symbol']})")
-        # TODO: Initialize game board
-        # TODO: Start first turn
+        # TODO: Initialize game board and start first turn
