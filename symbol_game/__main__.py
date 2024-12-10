@@ -1,6 +1,7 @@
 import argparse
 import socket
 import os
+import tkinter as tk
 from .messages import Identity
 from .game import Game
 from .gui import GUI
@@ -35,9 +36,11 @@ try:
         game.command_symbol(args.symbol)
     if args.gui:
         game.frontend = "gui"
-        # Initialize the GUI here
-        # game.gui = GUI(game)
-    game.run()
+        root = tk.Tk()
+        game.gui = GUI(root, game)
+        root.mainloop()
+    else:
+        game.run()
 except KeyboardInterrupt:
     print("\nExiting...")
 finally:

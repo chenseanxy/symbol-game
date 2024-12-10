@@ -87,43 +87,49 @@ class Game:
         """Main command loop handling user input and game commands."""
         while True:
             try:
-                cmd = input().split()
-                if not cmd:
-                    continue
-
-                command = cmd[0]
-                if command == "join":
-                    if len(cmd) != 3:
-                        print("Usage: join <ip> <port>")
-                        continue
-                    ip, port = cmd[1], int(cmd[2])
-                    self.command_join(ip, port)
-                elif command == "start":
-                    self.command_start()
-                elif command == "players":
-                    self.command_players()
-                elif command == "symbol":
-                    if len(cmd) != 2:
-                        print("Usage: symbol <symbol>")
-                        continue
-                    self.command_symbol(cmd[1])
-                elif command == "move":
-                    if len(cmd) != 3:
-                        print("Usage: move <row> <col>")
-                        continue
-                    row, col = int(cmd[1]), int(cmd[2])
-                    self.command_move(row, col)
-                elif command == "board":
-                    self.display_board()
-                elif command == "exit":
+                cmd = input()
+                exit = self.run_command(cmd)
+                if exit:
                     break
-                else:
-                    print("Unknown command:", command)
-                    print("Available commands: join, start, players, symbol, move, board, exit")
-
-                self.prompt()
             except Exception as e:
                 _logger.exception(f"Error processing command: {type(e).__name__}: {e}")
+
+
+    def run_command(self, cmd):
+        cmd = cmd.split()
+        if not cmd:
+            return
+        command = cmd[0]
+        if command == "join":
+            if len(cmd) != 3:
+                print("Usage: join <ip> <port>")
+                return
+            ip, port = cmd[1], int(cmd[2])
+            self.command_join(ip, port)
+        elif command == "start":
+            self.command_start()
+        elif command == "players":
+            self.command_players()
+        elif command == "symbol":
+            if len(cmd) != 2:
+                print("Usage: symbol <symbol>")
+                return
+            self.command_symbol(cmd[1])
+        elif command == "move":
+            if len(cmd) != 3:
+                print("Usage: move <row> <col>")
+                return
+            row, col = int(cmd[1]), int(cmd[2])
+            self.command_move(row, col)
+        elif command == "board":
+            self.display_board()
+        elif command == "exit":
+            return True
+        else:
+            print("Unknown command:", command)
+            print("Available commands: join, start, players, symbol, move, board, exit")
+        self.prompt()
+
 
     def prompt(self):
         '''Show command prompt beginning'''
