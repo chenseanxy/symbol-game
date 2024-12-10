@@ -29,7 +29,7 @@ filebeat.inputs:
 
   # Paths that should be crawled and fetched. Glob based paths.
   paths:
-    - /home/user/Desktop/symbol-game/logs/*.log
+    - /home/user/Desktop/symbol-game/logs/*.log.json
 
   # Exclude lines. A list of regular expressions to match. It drops the lines that are
   # matching any regular expression from the list.
