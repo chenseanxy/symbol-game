@@ -332,12 +332,11 @@ class Game:
         # Announce next turn
         if self.is_my_turn():
             print("\nIt's your turn! Use 'move <row> <col>' to make a move.")
-            self.prompt()
         else:
             next_player = next(p for p in self.players 
                             if self.player_ids[p] == self.turn_order[self.current_turn])
             print(f"\nIt's {next_player.name}'s turn!")
-
+        self.prompt()
 
 
     def on_validate_move(self, conn: Connection, msg: messages.ValidateMove):
