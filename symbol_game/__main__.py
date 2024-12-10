@@ -1,8 +1,10 @@
 import argparse
 import socket
 import os
+import tkinter as tk
 from .messages import Identity
 from .game import Game
+from .gui import GUI
 from .logging import init_logging
 
 parser = argparse.ArgumentParser(prog="Symbols Game")
@@ -12,6 +14,7 @@ parser.add_argument("--name", type=str, help="your username", default=None)
 parser.add_argument("--join", type=str, help="join a server", default=None)
 parser.add_argument("--host", action="store_true", help="host a server", default=False)
 parser.add_argument("--symbol", type=str, help="your symbol", default=None)
+parser.add_argument("--gui", action="store_true", help="use the GUI", default=False)
 parser.add_argument("--remote-logging", action="store_true", help="enable remote logging", default=False)
 
 args = parser.parse_args()
@@ -31,7 +34,13 @@ try:
         game.host = game.me
     if args.symbol:
         game.command_symbol(args.symbol)
-    game.run()
+    if args.gui:
+        game.frontend = "gui"
+        root = tk.Tk()
+        game.gui = GUI(root, game)
+        root.mainloop()
+    else:
+        game.run()
 except KeyboardInterrupt:
     print("\nExiting...")
 finally:

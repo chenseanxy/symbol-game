@@ -24,8 +24,11 @@ class Game:
         self.server = Server(me, self.connections)
         self.thread_pool = ThreadPoolExecutor(5, "game")
 
+        self.frontend = "cli"   # Frontend type: "cli" or "gui"
+        self.gui = None         # GUI frontend object
+
         # Game phase and role management
-        self.phase = "lobby"    # Current phase: "lobby" or "game"
+        self.phase = "lobby"    # Current phase: "lobby", "game", "end"
         self.host = None        # Identity of the host: None, self.me, or some other node
 
         # Player and symbol management
@@ -39,6 +42,8 @@ class Game:
         self.board: List[List[Optional[str]]] = []  # The game board grid
         self.turn_order: List[int] = []             # Order of player IDs for turns
         self.current_turn: int = 0                  # Index in turn_order
+        self.winner_id: Optional[int] = None        # Winning player ID
+        self.winner: Optional[Identity] = None      # Winning player Identity
 
     @property
     def can_host(self) -> bool:
@@ -84,46 +89,58 @@ class Game:
         """Main command loop handling user input and game commands."""
         while True:
             try:
-                cmd = input().split()
-                if not cmd:
-                    continue
-
-                command = cmd[0]
-                if command == "join":
-                    if len(cmd) != 3:
-                        print("Usage: join <ip> <port>")
-                        continue
-                    ip, port = cmd[1], int(cmd[2])
-                    self.command_join(ip, port)
-                elif command == "start":
-                    self.command_start()
-                elif command == "players":
-                    self.command_players()
-                elif command == "symbol":
-                    if len(cmd) != 2:
-                        print("Usage: symbol <symbol>")
-                        continue
-                    self.command_symbol(cmd[1])
-                elif command == "move":
-                    if len(cmd) != 3:
-                        print("Usage: move <row> <col>")
-                        continue
-                    row, col = int(cmd[1]), int(cmd[2])
-                    self.command_move(row, col)
-                elif command == "board":
-                    self.display_board()
-                elif command == "exit":
+                cmd = input()
+                exit = self.run_command(cmd)
+                if exit:
                     break
-                else:
-                    print("Unknown command:", command)
-                    print("Available commands: join, start, players, symbol, move, board, exit")
-
-                self.prompt()
             except Exception as e:
                 _logger.exception(f"Error processing command: {type(e).__name__}: {e}")
 
+
+    def run_command(self, cmd):
+        cmd = cmd.split()
+        if not cmd:
+            return
+        command = cmd[0]
+        if command == "join":
+            if len(cmd) != 3:
+                print("Usage: join <ip> <port>")
+                return
+            ip, port = cmd[1], int(cmd[2])
+            self.command_join(ip, port)
+        elif command == "start":
+            self.command_start()
+        elif command == "players":
+            self.command_players()
+        elif command == "symbol":
+            if len(cmd) != 2:
+                print("Usage: symbol <symbol>")
+                return
+            self.command_symbol(cmd[1])
+        elif command == "move":
+            if len(cmd) != 3:
+                print("Usage: move <row> <col>")
+                return
+            row, col = int(cmd[1]), int(cmd[2])
+            self.command_move(row, col)
+        elif command == "board":
+            self.display_board()
+        elif command == "exit":
+            return True
+        else:
+            print("Unknown command:", command)
+            print("Available commands: join, start, players, symbol, move, board, exit")
+        self.prompt()
+
+
     def prompt(self):
         '''Show command prompt beginning'''
+        if self.frontend == "gui":
+            self.gui.update_label()
+            self.gui.update_board()
+            self.gui.update_buttons()
+            return
+
         if self.phase == "lobby":
             if self.me not in self.symbols:
                 print("Choose a symbol with 'symbol <X>'")
@@ -595,13 +612,15 @@ class Game:
 
         # check for non-None winner
         if game_result:
+            self.phase = "end"
             winner = next((v.winning_player for v in validations.values() if v.winning_player), None)
 
             # print endgame msg
             if winner:
-                winner_name = next(p.name for p in self.players 
-                                if self.player_ids[p] == winner)
-                print(f"\nGame Over! {winner_name} wins!")
+                self.winner_id = winner
+                self.winner = next(p for p in self.players if self.player_ids[p] == winner)
+                
+                print(f"\nGame Over! {self.winner.name} wins!")
             else:
                 print("\nGame Over! It's a tie!")
             return
