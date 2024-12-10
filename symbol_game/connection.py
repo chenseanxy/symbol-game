@@ -170,7 +170,6 @@ class Server:
     def stop(self):
         _logger.info("Stopping server")
         self.terminating.set()
-        self.sock.shutdown(socket.SHUT_RDWR)
         socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(self.ident.addr)
         self.sock.close()
         self.thread.join()

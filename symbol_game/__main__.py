@@ -32,5 +32,7 @@ try:
     if args.symbol:
         game.command_symbol(args.symbol)
     game.run()
+except KeyboardInterrupt:
+    print("\nExiting...")
 finally:
     game.stop()
