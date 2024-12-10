@@ -24,6 +24,9 @@ class Game:
         self.server = Server(me, self.connections)
         self.thread_pool = ThreadPoolExecutor(5, "game")
 
+        self.frontend = "cli"   # Frontend type: "cli" or "gui"
+        self.gui = None         # GUI frontend object
+
         # Game phase and role management
         self.phase = "lobby"    # Current phase: "lobby" or "game"
         self.host = None        # Identity of the host: None, self.me, or some other node
