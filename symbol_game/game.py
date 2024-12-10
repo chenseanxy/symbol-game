@@ -28,7 +28,7 @@ class Game:
         self.gui = None         # GUI frontend object
 
         # Game phase and role management
-        self.phase = "lobby"    # Current phase: "lobby" or "game"
+        self.phase = "lobby"    # Current phase: "lobby", "game", "end"
         self.host = None        # Identity of the host: None, self.me, or some other node
 
         # Player and symbol management
@@ -42,6 +42,8 @@ class Game:
         self.board: List[List[Optional[str]]] = []  # The game board grid
         self.turn_order: List[int] = []             # Order of player IDs for turns
         self.current_turn: int = 0                  # Index in turn_order
+        self.winner_id: Optional[int] = None        # Winning player ID
+        self.winner: Optional[Identity] = None      # Winning player Identity
 
     @property
     def can_host(self) -> bool:
@@ -133,6 +135,12 @@ class Game:
 
     def prompt(self):
         '''Show command prompt beginning'''
+        if self.frontend == "gui":
+            self.gui.update_label()
+            self.gui.update_board()
+            self.gui.update_buttons()
+            return
+
         if self.phase == "lobby":
             if self.me not in self.symbols:
                 print("Choose a symbol with 'symbol <X>'")
@@ -604,13 +612,15 @@ class Game:
 
         # check for non-None winner
         if game_result:
+            self.phase = "end"
             winner = next((v.winning_player for v in validations.values() if v.winning_player), None)
 
             # print endgame msg
             if winner:
-                winner_name = next(p.name for p in self.players 
-                                if self.player_ids[p] == winner)
-                print(f"\nGame Over! {winner_name} wins!")
+                self.winner_id = winner
+                self.winner = next(p for p in self.players if self.player_ids[p] == winner)
+                
+                print(f"\nGame Over! {self.winner.name} wins!")
             else:
                 print("\nGame Over! It's a tie!")
             return
