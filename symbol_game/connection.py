@@ -72,7 +72,7 @@ class Connection:
                 if self.terminating.is_set():
                     break
 
-    def receive(self):
+    def receive(self, timeout=5):
         """Receive and parse a message with better error handling"""
         try:
             data = self.socket.recv(1024)
@@ -86,6 +86,7 @@ class Connection:
                 message = json.loads(data.decode())
                 _logger.info(f"Successfully received message: {message}")
                 return message
+
             except json.JSONDecodeError as e:
                 _logger.error(f"Failed to decode message: {data!r}")
                 raise
