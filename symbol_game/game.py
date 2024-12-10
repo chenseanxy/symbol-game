@@ -52,6 +52,7 @@ class Game:
         """Initialize the game server and begin accepting connections."""
         self.server.set_on_connect(self.on_connect)
         self.server.start()
+        _logger.info(f"Starting game for {self.me}")
         print(f"Hello, {self.me}!")
         print(f"Wait for other players to join, or join a game with the command 'join <ip> <port>'")
 
@@ -195,7 +196,11 @@ class Game:
         if self.phase != "lobby":
             print("Can only choose symbol in lobby phase")
             return
-            
+        
+        if not self.host:
+            print("Wait for players to join, or join a game, then choose symbols")
+            return
+
         if self.is_host:
             if symbol not in self.symbols.values():
                 self.symbols[self.me] = symbol
@@ -209,7 +214,7 @@ class Game:
         # Store pending symbol and send validation request
         self.pending_symbol = symbol
         choice_msg = messages.ChooseSymbol(symbol=symbol)
-        host_conn = next(iter(self.connections.connections.values()))
+        host_conn = self.connections.get(self.host)
         
         print("Waiting for symbol validation from host...")
         _logger.info(f"Sending symbol choice to host: {symbol}")
