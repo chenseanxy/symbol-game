@@ -1,11 +1,12 @@
 import argparse
+import socket
 from .messages import Identity
 from .game import Game
 from .logging import init_logging
 
 parser = argparse.ArgumentParser(prog="Symbols Game")
-parser.add_argument("--address", type=str, help="your IP address")
-parser.add_argument("--port", type=int, help="port to bind to")
+parser.add_argument("--address", type=str, help="your IP address", default=socket.gethostname())
+parser.add_argument("--port", type=int, help="port to bind to", default=10080)
 parser.add_argument("--name", type=str, help="your username", default=None)
 parser.add_argument("--join", type=str, help="join a server", default=None)
 parser.add_argument("--host", action="store_true", help="host a server", default=False)
