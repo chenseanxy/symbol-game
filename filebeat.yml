@@ -31,6 +31,12 @@ filebeat.inputs:
   paths:
     - /home/user/Desktop/symbol-game/logs/*.log.json
 
+  # Expand fields
+  json.keys_under_root: true
+  json.overwrite_keys: true
+  json.add_error_key: true
+  json.expand_keys: true
+
   # Exclude lines. A list of regular expressions to match. It drops the lines that are
   # matching any regular expression from the list.
   # Line filtering happens after the parsers pipeline. If you would like to filter lines
