@@ -152,8 +152,9 @@ class Server:
     '''Handles incoming connections'''
     def __init__(self, ident: Identity, connection_store: ConnectionStore):
         self.ident = ident
+        self.server_addr = ("0.0.0.0", ident.port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind(self.ident.addr)
+        self.sock.bind(self.server_addr)
         self.thread = threading.Thread(target=self._listen, name="server")
         self.terminating = threading.Event()
         self.connection_store = connection_store
