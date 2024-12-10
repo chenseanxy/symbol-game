@@ -52,6 +52,7 @@ class Game:
         """Initialize the game server and begin accepting connections."""
         self.server.set_on_connect(self.on_connect)
         self.server.start()
+        _logger.info(f"Starting game for {self.me}")
         print(f"Hello, {self.me}!")
         print(f"Wait for other players to join, or join a game with the command 'join <ip> <port>'")
 

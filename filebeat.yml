@@ -19,10 +19,10 @@ filebeat.inputs:
 # Below are the input-specific configurations.
 
 # filestream is an input for collecting log messages from files.
-- type: filestream
+- type: log
 
   # Unique ID among all inputs, an ID is required.
-  id: filestream
+  id: log
 
   # Change to true to enable this input configuration.
   enabled: true
@@ -36,28 +36,6 @@ filebeat.inputs:
   json.overwrite_keys: true
   json.add_error_key: true
   json.expand_keys: true
-
-  # Exclude lines. A list of regular expressions to match. It drops the lines that are
-  # matching any regular expression from the list.
-  # Line filtering happens after the parsers pipeline. If you would like to filter lines
-  # before parsers, use include_message parser.
-  #exclude_lines: ['^DBG']
-
-  # Include lines. A list of regular expressions to match. It exports the lines that are
-  # matching any regular expression from the list.
-  # Line filtering happens after the parsers pipeline. If you would like to filter lines
-  # before parsers, use include_message parser.
-  #include_lines: ['^ERR', '^WARN']
-
-  # Exclude files. A list of regular expressions to match. Filebeat drops the files that
-  # are matching any regular expression from the list. By default, no files are dropped.
-  #prospector.scanner.exclude_files: ['.gz$']
-
-  # Optional additional fields. These fields can be freely picked
-  # to add additional information to the crawled log files for filtering
-  #fields:
-  #  level: debug
-  #  review: 1
 
 # ============================== Filebeat modules ==============================
 
