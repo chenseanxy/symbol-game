@@ -84,7 +84,7 @@ class Connection:
             
             try:
                 message = json.loads(data.decode())
-                _logger.info(f"Successfully received message: {message}")
+                _logger.info(f"Successfully received message from {self.other}: {message}")
                 return message
 
             except json.JSONDecodeError as e:
@@ -102,7 +102,7 @@ class Connection:
         if isinstance(message, BaseMessage):
             message = message.model_dump()
             
-        _logger.info(f"Sending: {message}")
+        _logger.info(f"Sending message to {self.other}: {message}")
         self.socket.send(json.dumps(message).encode())
 
     def stop(self):

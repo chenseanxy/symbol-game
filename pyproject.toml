@@ -9,6 +9,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.9"
 pydantic = "^2.10.3"
+ecs-logging = "^2.2.0"
 
 
 [build-system]
