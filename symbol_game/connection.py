@@ -190,6 +190,6 @@ class Server:
                     self.on_connect(connection)
                     
             except Exception as e:
-                _logger.error(f"Error in server loop: {e}")
+                _logger.exception(f"Error in server loop: {e}")
                 if self.terminating.is_set():
                     break
