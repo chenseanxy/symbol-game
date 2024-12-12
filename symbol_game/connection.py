@@ -9,6 +9,7 @@ from .messages import Identity, BaseMessage, message_types
 
 _logger = logging.getLogger(__name__)
 
+
 class Connection:
     '''Handles communication between two nodes'''
     def __init__(self, sock: socket.socket, *, me: Identity, transport: Identity):

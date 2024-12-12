@@ -1,6 +1,8 @@
+# author: Axel
 import tkinter as tk
 from tkinter import simpledialog, messagebox
 from .game import Game
+
 
 class GUI:
     """Symbols Game GUI class"""
