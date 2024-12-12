@@ -32,16 +32,7 @@ class LobbyMixin(GameProtocol):
             return
 
         conn = self.connections.connect(Identity(ip=ip, port=port), self.me)
-        
-        # Set up message handlers as client
-        conn.set_message_handler('validate_symbol', self.on_validate_symbol)
-        conn.set_message_handler('start_game', self.on_start_game)
-
-        # Setup message handlers for the game phase
-        conn.set_message_handler('propose_move', self.on_propose_move)
-        conn.set_message_handler('commit_move', self.on_commit_move)
-        conn.set_message_handler('validate_move', self.on_validate_move)
-        
+        self.setup_handlers(conn)
         print(f"Connected to {conn.other}")
         self.connections.add(conn)
         self.host = conn.other

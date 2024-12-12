@@ -30,7 +30,7 @@ class Connection:
 
     def set_message_handler(self, message_type: str, handler: Callable):
         """Register a message handler"""
-        _logger.info(f"Registering handler for message type: {message_type}")
+        _logger.debug(f"Registering handler for message type: {message_type}")
         self.message_handlers[message_type] = handler
 
     def start(self):
