@@ -41,7 +41,7 @@ class GameProtocol(Protocol):
 
     @property
     def can_host(self) -> bool:
-        return self.host == self.me
+        return self.host is None or self.host == self.me
 
     @property
     def is_host(self) -> bool:
