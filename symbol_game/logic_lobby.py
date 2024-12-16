@@ -48,7 +48,7 @@ class LobbyMixin(GameProtocol):
             return
 
         if self.is_host:
-            if symbol not in self.symbols.values():
+            if symbol not in self.symbols.values() or symbol == self.symbols[self.me]:
                 self.symbols[self.me] = symbol
                 _logger.info(f"Host chose symbol: {symbol}")
                 print(f"Successfully chose symbol: {symbol}")
@@ -70,7 +70,7 @@ class LobbyMixin(GameProtocol):
         """Handle incoming symbol choice request."""
         _logger.info(f"Received symbol choice request from {conn.other}: {msg.symbol}")
         
-        is_valid = msg.symbol not in self.symbols.values()
+        is_valid = msg.symbol not in self.symbols.values() or msg.symbol == self.symbols.get(conn.other)
         _logger.info(f"Symbol {msg.symbol} validation result: {is_valid}")
         
         response = messages.ValidateSymbol(is_valid=is_valid)

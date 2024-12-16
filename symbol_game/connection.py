@@ -28,8 +28,12 @@ class Connection:
             target=self.message_loop, name=f"incoming_{transport.ip}_{transport.port}")
         self.message_handlers: Dict[str, Callable] = {}
 
-    def set_message_handler(self, message_type: str, handler: Callable):
+    def set_message_handler(self, message_type: str, handler: Optional[Callable]):
         """Register a message handler"""
+        if handler is None:
+            _logger.debug(f"Unsetting handler for message type: {message_type}")
+            self.message_handlers.pop(message_type, None)
+            return
         _logger.debug(f"Registering handler for message type: {message_type}")
         self.message_handlers[message_type] = handler
 
@@ -66,7 +70,7 @@ class Connection:
                     _logger.warning(f"No handler for message type: {method}")
                     
             except ConnectionError:
-                _logger.error("Connection lost")
+                _logger.exception("Connection lost")
                 break
             except Exception as e:
                 _logger.exception(f"Error in message loop: {type(e).__name__}: {e}")
@@ -77,26 +81,27 @@ class Connection:
         """Receive and parse a message with better error handling"""
         try:
             data = self.socket.recv(1024)
-            if not data:
-                if not self.terminating.is_set():
-                    _logger.warning("Connection closed by peer")
-                    raise ConnectionError("Connection closed by peer")
-                return None
-            
-            try:
-                message = json.loads(data.decode())
-                _logger.info(f"Successfully received message from {self.other}: {message}")
-                return message
-
-            except json.JSONDecodeError as e:
-                _logger.error(f"Failed to decode message: {data!r}")
-                raise
-                
         except socket.error as e:
             if not self.terminating.is_set():
                 _logger.error(f"Socket error while receiving: {e}")
                 raise
             return None
+
+        if not data:
+            if not self.terminating.is_set():
+                _logger.warning("No bytes received, connection closed by peer")
+                raise ConnectionError("Connection closed by peer")
+            return None
+
+        try:
+            message = json.loads(data.decode())
+            _logger.info(f"Successfully received message from {self.other}: {message}")
+            return message
+
+        except json.JSONDecodeError as e:
+            _logger.error(f"Failed to decode message: {data!r}")
+            raise
+                
 
     def send(self, message: BaseMessage):
         """Send a message"""
@@ -124,6 +129,7 @@ class ConnectionStore:
         with self.lock:
             if conn.other in self.connections:
                 # Likely a reconnection
+                _logger.debug(f"Replacing connection to {conn.other}")
                 prev = self.connections.pop(conn.other)
                 conn.message_handlers = prev.message_handlers
                 prev.stop()

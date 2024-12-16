@@ -11,7 +11,9 @@ from .base import GameProtocol
 from .connection import Connection
 
 _logger = logging.getLogger(__name__)
-
+VALIDATION_TIMEOUT = 3.0
+VALIDATION_RECONNECT_WAIT = 1.0
+VALIDATION_RETRIES = 3
 
 class GameTurnsMixin(GameProtocol):
     def is_board_full(self) -> bool:
@@ -67,10 +69,9 @@ class GameTurnsMixin(GameProtocol):
 
         def on_validation(player, conn, response):
             _logger.info(f"Received validation response from {conn.other}: {response}")
-            _logger.info(f"{player=} {conn.other=}")
-            validations[player] = response
+            validations[player] = response  # Only accept last message if multiple
 
-        print("Proposing move to other players...")
+        # Setup task handlers
         for player in self.players:
             if player != self.me:
                 conn = self.connections.get(player)
@@ -80,17 +81,64 @@ class GameTurnsMixin(GameProtocol):
                     partial(on_validation, player)
                 )
                 validations[player] = None      # Mark as pending
-                conn.send(move_msg)
 
-        # Wait for all validations to come back, timeout after 10 seconds
-        deadline = time.time() + 10
-        while any(v is None for v in validations.values()):
-            print("Waiting for validation responses...")
-            if time.time() > deadline:
-                print("Validation responses timed out")
-                # TODO: handle
-                return
-            time.sleep(0.1)
+        validated = False
+        tries = 0
+        while not validated:
+            if tries > VALIDATION_RETRIES:
+                print("Move validation retries exceeded")
+                _logger.error(f"Move validation retries exceeded: {VALIDATION_RETRIES} {validations}")
+                break
+            if tries > 0:
+                print("Retrying proposing move...")
+                _logger.info("")
+            else:
+                print("Proposing move to other players...")
+            tries += 1
+
+            # Send out proposal
+            for (player, response) in validations.items():
+                if response is None:
+                    _logger.info(f"Sending move proposal to {player}: {move_msg}")
+                    try:
+                        conn = self.connections.get(player)
+                        conn.send(move_msg)
+                    except ConnectionAbortedError as e:
+                        _logger.error(
+                            f"Error sending proposal to {player}, "
+                            f"retrying connection in {VALIDATION_RECONNECT_WAIT}: {e}"
+                        )
+                        time.sleep(VALIDATION_RECONNECT_WAIT)
+                        # Try to reconnect
+                        # TODO: delagate this to the connection class
+                        try:
+                            conn = self.connections.connect(player, self.me)
+                            self.connections.add(conn)  # handlers should inherit
+                            conn.send(move_msg)
+                        except ConnectionRefusedError as e:
+                            _logger.error(f"Error connecting to {player}: {e}")
+                            continue
+
+            # Wait for all validations to come back, timeout after 10 seconds
+            deadline = time.time() + 10
+            validated = False
+            while any(v is None for v in validations.values()):
+                _logger.debug(f"Waiting for validation responses: {validations}")
+                if time.time() > deadline:
+                    print("Validation responses timed out")
+                    _logger.error(f"Validation responses timed out: {validations}")
+                    break
+                time.sleep(0.1)
+            else:
+                validated = True
+        
+        # Reset message handlers
+        for player in validations.keys():
+            conn = self.connections.get(player)
+            conn.set_message_handler('validate_move', None)
+
+        if not validated:
+            return
 
         _logger.info(f"Validation check starting. All validations: {validations}")  # Before validation check
         all_valid = all(v.is_valid for v in validations.values())
@@ -196,26 +244,6 @@ class GameTurnsMixin(GameProtocol):
         )
         _logger.info(f"Sending validation response: {response}")
         conn.send(response)
-
-    def on_validate_move(self, conn: Connection, msg: messages.ValidateMove):
-        """handles validation response for a proposed move."""
-        _logger.info(f"Received move validation from {conn.other}: valid={msg.is_valid}, "
-                    f"game_result={msg.game_result}, winning_player={msg.winning_player}")
-
-        if not msg.is_valid:
-            print(f"Move was rejected by {conn.other}")
-            return
-
-        if msg.game_result:
-            if msg.game_result == "win":
-                winner_name = next(p.name for p in self.players 
-                                if self.player_ids[p] == msg.winning_player)
-                print(f"This move would result in victory for {winner_name}!")
-            else:
-                print("This move would result in a tie!")
-
-        _logger.info("Move validation accepted")
-        return True
 
     def on_commit_move(self, conn: Connection, msg: messages.CommitMove):
         """move commitment - update board with the confirmed move."""

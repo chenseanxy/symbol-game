@@ -6,6 +6,7 @@ from .base import GameProtocol
 from .logic_lobby import LobbyMixin
 from .logic_start_game import StartGameMixin
 from .logic_turns import GameTurnsMixin
+from .sync import SyncGameStateMixin
 
 from .messages import Identity
 from .connection import Connection, ConnectionStore, Server
@@ -13,7 +14,7 @@ from .connection import Connection, ConnectionStore, Server
 _logger = logging.getLogger(__name__)
 
 
-class Game(LobbyMixin, StartGameMixin, GameTurnsMixin, GameProtocol):
+class Game(LobbyMixin, StartGameMixin, GameTurnsMixin, SyncGameStateMixin, GameProtocol):
     """
     Main game class that coordinates the multiplayer tic-tac-toe game.
     Handles both the lobby phase and the game phase, managing player connections,
@@ -111,6 +112,8 @@ class Game(LobbyMixin, StartGameMixin, GameTurnsMixin, GameProtocol):
             self.display_board()
         elif command == "exit":
             return True
+        elif command == "resync":
+            self.command_resync_game_state()
         else:
             print("Unknown command:", command)
             print("Available commands: join, start, players, symbol, move, board, exit")
@@ -162,5 +165,5 @@ class Game(LobbyMixin, StartGameMixin, GameTurnsMixin, GameProtocol):
         conn.set_message_handler('start_game', self.on_start_game)
         conn.set_message_handler('propose_move', self.on_propose_move)
         conn.set_message_handler('commit_move', self.on_commit_move)
-        conn.set_message_handler('validate_move', self.on_validate_move)
+        conn.set_message_handler('request_game_state', self.on_request_game_state)
         return 

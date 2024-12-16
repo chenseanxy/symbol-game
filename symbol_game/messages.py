@@ -76,6 +76,23 @@ class CommitMove(BaseMessage):
     symbol: str
     player_id: int
 
+class RequestGameState(BaseMessage):
+    method: Literal['request_game_state'] = 'request_game_state'
+
+class GameState(BaseMessage):
+    method: Literal['game_state'] = 'game_state'
+
+    players: List[Identity]
+    symbols: List[str]
+    player_ids: List[int]
+
+    board_size: int
+    board: List[List[Optional[str]]]
+    turn_order: List[int]
+    current_turn: int
+    winner_id: Optional[int]
+    winner: Optional[Identity]
+
 # Registry of message types
 message_types: Dict[str, type[BaseMessage]] = {
     'hello': Hello,
@@ -85,4 +102,6 @@ message_types: Dict[str, type[BaseMessage]] = {
     'propose_move': ProposeMove,
     'validate_move': ValidateMove,
     'commit_move': CommitMove,
+    'request_game_state': RequestGameState,
+    'game_state': GameState,
 }

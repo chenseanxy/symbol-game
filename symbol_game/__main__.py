@@ -16,6 +16,7 @@ parser.add_argument("--host", action="store_true", help="host a server", default
 parser.add_argument("--symbol", type=str, help="your symbol", default=None)
 parser.add_argument("--gui", action="store_true", help="use the GUI", default=False)
 parser.add_argument("--remote-logging", action="store_true", help="enable remote logging", default=False)
+parser.add_argument("--reconnect", action="store_true", help="reconnect to existing game", default=False)
 
 args = parser.parse_args()
 
@@ -34,6 +35,8 @@ try:
         game.host = game.me
     if args.symbol:
         game.command_symbol(args.symbol)
+    if args.reconnect:
+        game.command_resync_game_state()
     if args.gui:
         game.frontend = "gui"
         root = tk.Tk()
