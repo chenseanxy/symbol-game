@@ -12,7 +12,6 @@ from .connection import Connection
 
 _logger = logging.getLogger(__name__)
 VALIDATION_TIMEOUT = 3.0
-VALIDATION_RECONNECT_WAIT = 1.0
 VALIDATION_RETRIES = 3
 
 class GameTurnsMixin(GameProtocol):
@@ -103,24 +102,14 @@ class GameTurnsMixin(GameProtocol):
                     try:
                         conn = self.connections.get(player)
                         conn.send(move_msg)
-                    except ConnectionAbortedError as e:
-                        _logger.error(
-                            f"Error sending proposal to {player}, "
-                            f"retrying connection in {VALIDATION_RECONNECT_WAIT}: {e}"
-                        )
-                        time.sleep(VALIDATION_RECONNECT_WAIT)
-                        # Try to reconnect
-                        # TODO: delagate this to the connection class
-                        try:
-                            conn = self.connections.connect(player, self.me)
-                            self.connections.add(conn)  # handlers should inherit
-                            conn.send(move_msg)
-                        except ConnectionRefusedError as e:
-                            _logger.error(f"Error connecting to {player}: {e}")
-                            continue
+                    except Exception as e:
+                        # Connection closed, broken pipe, etc
+                        _logger.error(f"Error sending proposal to {player}: {type(e).__name__}: {e}")
+                        # Do not retry connection
+                        # Wait for players to reconnect
 
             # Wait for all validations to come back, timeout after 10 seconds
-            deadline = time.time() + 10
+            deadline = time.time() + VALIDATION_TIMEOUT
             validated = False
             while any(v is None for v in validations.values()):
                 _logger.debug(f"Waiting for validation responses: {validations}")

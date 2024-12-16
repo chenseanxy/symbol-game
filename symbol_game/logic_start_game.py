@@ -103,12 +103,7 @@ class StartGameMixin(GameProtocol):
 
         # Connect to clients that have their id smaller than us
         # ID, NOT TURN ORDER, this should not be randomized
-        for player in self.players:
-            if self.player_ids[player] < self.player_ids[self.me]:
-                if player not in self.connections.connections:
-                    conn = self.connections.connect(player, self.me)
-                    self.setup_handlers(conn)
-                    self.connections.add(conn)
+        self.connect_to_players()
 
         # Wait for all other players to connect
         time.sleep(0.02)

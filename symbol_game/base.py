@@ -63,5 +63,12 @@ class GameProtocol(Protocol):
         '''Set up message handlers for new connections'''
         pass
 
+    def connect_to_players(self, reconnect: bool = False) -> None:
+        """
+        Connect to all players with smaller IDs for turn order.
+        if reconnect: try to proactively connect to all players
+        """
+        pass
+
 class GuiProtocol(Protocol):
     pass

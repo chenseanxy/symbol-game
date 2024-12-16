@@ -167,3 +167,14 @@ class Game(LobbyMixin, StartGameMixin, GameTurnsMixin, SyncGameStateMixin, GameP
         conn.set_message_handler('commit_move', self.on_commit_move)
         conn.set_message_handler('request_game_state', self.on_request_game_state)
         return 
+    
+    def connect_to_players(self, reconnect = False):
+        for player in self.players:
+            if player == self.me:
+                continue
+            if not reconnect and self.player_ids[player] < self.player_ids[self.me]:
+                continue
+            if player not in self.connections.connections:
+                conn = self.connections.connect(player, self.me)
+                self.setup_handlers(conn)
+                self.connections.add(conn)

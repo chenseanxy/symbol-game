@@ -83,7 +83,7 @@ class Connection:
             data = self.socket.recv(1024)
         except socket.error as e:
             if not self.terminating.is_set():
-                _logger.error(f"Socket error while receiving: {e}")
+                _logger.error(f"Socket error while receiving: {type(e).__name__}: {e}")
                 raise
             return None
 
@@ -196,6 +196,6 @@ class Server:
                     self.on_connect(connection)
                     
             except Exception as e:
-                _logger.exception(f"Error in server loop: {e}")
+                _logger.exception(f"Error in server loop: {type(e).__name__}: {e}")
                 if self.terminating.is_set():
                     break

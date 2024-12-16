@@ -60,6 +60,8 @@ class SyncGameStateMixin(GameProtocol):
         
         host_conn.set_message_handler(messages.GameState, None)
 
+        self.connect_to_players(reconnect=True)
+
         if not synced:
             _logger.error(f"Failed to synchronize game state with host within {RESYNC_TIMEOUT}s")
             raise TimeoutError("Failed to synchronize game state with host")
