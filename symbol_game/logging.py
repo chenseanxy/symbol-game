@@ -1,5 +1,5 @@
 import logging
-import ecs_logging
+
 
 def init_logging(ip, port, enable_remote, level = logging.INFO):
     logging.basicConfig(
@@ -8,6 +8,7 @@ def init_logging(ip, port, enable_remote, level = logging.INFO):
     )
 
     if enable_remote:
+        import ecs_logging
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
         handler = logging.FileHandler(f'logs/{ip}-{port}-app.log.json')

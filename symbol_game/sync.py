@@ -62,6 +62,9 @@ class SyncGameStateMixin(GameProtocol):
 
         self.connect_to_players(reconnect=True)
 
+        if self.is_my_turn():
+            print("\nIt's your turn! Use 'move <row> <col>' to make a move.")
+
         if not synced:
             _logger.error(f"Failed to synchronize game state with host within {RESYNC_TIMEOUT}s")
             raise TimeoutError("Failed to synchronize game state with host")

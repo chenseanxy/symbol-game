@@ -106,7 +106,7 @@ class GameTurnsMixin(GameProtocol):
                         # Connection closed, broken pipe, etc
                         _logger.error(f"Error sending proposal to {player}: {type(e).__name__}: {e}")
                         # Do not retry connection
-                        # Wait for players to reconnect
+                        # Wait for dropped out player to reconnect to us
 
             # Wait for all validations to come back, timeout after 10 seconds
             deadline = time.time() + VALIDATION_TIMEOUT
@@ -127,6 +127,8 @@ class GameTurnsMixin(GameProtocol):
             conn.set_message_handler('validate_move', None)
 
         if not validated:
+            print("Move validation failed, you can retry making a move.")
+            self.prompt()
             return
 
         _logger.info(f"Validation check starting. All validations: {validations}")  # Before validation check
@@ -135,7 +137,7 @@ class GameTurnsMixin(GameProtocol):
 
         if not all_valid:
             print("Move was rejected by other players!")
-            # TODO: handle
+            self.prompt()
             return
 
         _logger.info("Move validated, proceeding with commit")
