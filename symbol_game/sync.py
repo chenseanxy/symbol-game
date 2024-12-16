@@ -58,7 +58,7 @@ class SyncGameStateMixin(GameProtocol):
             _logger.debug(f"Waiting for game state synchronization from {self.host}")
             time.sleep(0.1)
         
-        host_conn.set_message_handler(messages.GameState, None)
+        host_conn.set_message_handler('game_state', None)
 
         self.connect_to_players(reconnect=True)
 
